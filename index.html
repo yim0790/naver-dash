@@ -31,6 +31,13 @@ h1{font-size:20px;margin:0 0 3px;letter-spacing:-.4px;color:var(--navy);font-wei
   padding:14px 16px;margin-bottom:14px;box-shadow:0 1px 3px rgba(20,40,80,.05);}
 .card h2{font-size:13.5px;margin:0 0 11px;color:var(--head);font-weight:700;
   padding-left:9px;border-left:3px solid var(--blue);letter-spacing:-.2px;}
+.cardhd{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+.cardhd h2{margin-bottom:11px;}
+.xlsx{border:1px solid #1E7A45;background:#1E7A45;color:#fff;border-radius:7px;
+  padding:0 14px;min-height:32px;font-family:inherit;font-size:12px;font-weight:700;
+  cursor:pointer;margin-bottom:11px;white-space:nowrap;}
+.xlsx:active{background:#176036;}
+.xlsx:disabled{background:var(--gray);border-color:var(--gray);}
 .badge{display:none;background:#FDECEA;color:#B3261E;border:1px solid #F5C6C0;
   border-radius:6px;padding:5px 10px;font-size:11.5px;font-weight:700;margin-bottom:10px;}
 .badge.on{display:block;}
@@ -202,7 +209,10 @@ tfoot td.fx1,tfoot td.fx2,tfoot td.fx3{z-index:7;background:#EDF2F9;}
 
 <!-- 4 분석 테이블 -->
 <div class="card">
-  <h2 id="tblTitle">판매 수량 및 금액</h2>
+  <div class="cardhd">
+    <h2 id="tblTitle">판매 수량 및 금액</h2>
+    <button class="xlsx" id="btnXlsx">엑셀 내보내기</button>
+  </div>
   <div class="tscroll"><table id="tbl"></table></div>
   <div class="note" id="tblNote"></div>
 </div>
@@ -593,6 +603,188 @@ function renderConvTable(A){
   bindRows();
 }
 
+/* ═════════ 엑셀(xlsx) 내보내기 — 외부 라이브러리 없이 직접 생성 ═════════
+   xlsx 는 XML 몇 개를 zip 으로 묶은 것이다. 여기서는 무압축(store) zip 을 쓴다.
+   무압축이어도 엑셀이 정상적으로 연다. 셀서식은 숫자(#,##0)와 백분율(0.0%) 두 가지. */
+const XT=new TextEncoder();
+const CRCT=(()=>{const t=new Uint32Array(256);
+  for(let i=0;i<256;i++){let c=i;for(let k=0;k<8;k++)c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);t[i]=c>>>0;}
+  return t;})();
+function crc32(u8){let c=0xFFFFFFFF;for(let i=0;i<u8.length;i++)c=CRCT[(c^u8[i])&0xFF]^(c>>>8);return (c^0xFFFFFFFF)>>>0;}
+
+function zipStore(files){
+  const parts=[],cd=[];let off=0;
+  const u16=v=>[v&255,(v>>8)&255];
+  const u32=v=>[v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255];
+  files.forEach(f=>{
+    const name=XT.encode(f.name), data=f.data, crc=crc32(data);
+    const h=[].concat([80,75,3,4],u16(20),u16(0),u16(0),u16(0),u16(0),
+      u32(crc),u32(data.length),u32(data.length),u16(name.length),u16(0));
+    parts.push(new Uint8Array(h),name,data);
+    cd.push({name,crc,len:data.length,off});
+    off+=h.length+name.length+data.length;
+  });
+  const cdStart=off;const cdParts=[];
+  cd.forEach(e=>{
+    const h=[].concat([80,75,1,2],u16(20),u16(20),u16(0),u16(0),u16(0),u16(0),
+      u32(e.crc),u32(e.len),u32(e.len),u16(e.name.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(e.off));
+    cdParts.push(new Uint8Array(h),e.name); off+=h.length+e.name.length;
+  });
+  const eocd=new Uint8Array([].concat([80,75,5,6],u16(0),u16(0),u16(cd.length),u16(cd.length),
+    u32(off-cdStart),u32(cdStart),u16(0)));
+  const all=parts.concat(cdParts,[eocd]);
+  const total=all.reduce((s,a)=>s+a.length,0);
+  const out=new Uint8Array(total);let p=0;
+  all.forEach(a=>{out.set(a,p);p+=a.length;});
+  return out;
+}
+
+const xe=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function colName(n){let s='';n++;while(n>0){const m=(n-1)%26;s=String.fromCharCode(65+m)+s;n=(n-m-1)/26;}return s;}
+
+/* rows: [[{v,t,s}, ...], ...]   t: 'n'=숫자 's'=문자   s: 0일반 1숫자 2백분율 3헤더 4굵은텍스트 */
+function buildXlsx(rows, sheetName, colWidths){
+  let sheet='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">';
+  if(colWidths&&colWidths.length){
+    sheet+='<cols>'+colWidths.map((w,i)=>'<col min="'+(i+1)+'" max="'+(i+1)+'" width="'+w+'" customWidth="1"/>').join('')+'</cols>';
+  }
+  sheet+='<sheetData>';
+  rows.forEach((row,ri)=>{
+    sheet+='<row r="'+(ri+1)+'">';
+    row.forEach((c,ci)=>{
+      if(c==null||c.v===''||c.v==null) return;
+      const ref=colName(ci)+(ri+1), st=c.s?(' s="'+c.s+'"'):'';
+      if(c.t==='n') sheet+='<c r="'+ref+'"'+st+'><v>'+c.v+'</v></c>';
+      else sheet+='<c r="'+ref+'"'+st+' t="inlineStr"><is><t xml:space="preserve">'+xe(c.v)+'</t></is></c>';
+    });
+    sheet+='</row>';
+  });
+  sheet+='</sheetData></worksheet>';
+
+  const styles='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+    '<numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0"/><numFmt numFmtId="165" formatCode="0.0%"/></numFmts>'+
+    '<fonts count="3">'+
+      '<font><sz val="10"/><name val="맑은 고딕"/></font>'+
+      '<font><b/><color rgb="FFFFFFFF"/><sz val="10"/><name val="맑은 고딕"/></font>'+
+      '<font><b/><sz val="10"/><name val="맑은 고딕"/></font></fonts>'+
+    '<fills count="3"><fill><patternFill patternType="none"/></fill>'+
+      '<fill><patternFill patternType="gray125"/></fill>'+
+      '<fill><patternFill patternType="solid"><fgColor rgb="FF2C4A75"/><bgColor indexed="64"/></patternFill></fill></fills>'+
+    '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'+
+    '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
+    '<cellXfs count="5">'+
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'+
+      '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>'+
+      '<xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>'+
+      '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1">'+
+        '<alignment horizontal="center" vertical="center"/></xf>'+
+      '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>'+
+    '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+
+  const f=(n,s)=>({name:n,data:XT.encode(s)});
+  return zipStore([
+    f('[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'+
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'+
+      '<Default Extension="xml" ContentType="application/xml"/>'+
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'+
+      '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'+
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'),
+    f('_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'),
+    f('xl/workbook.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '+
+      'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'+
+      '<sheets><sheet name="'+xe(sheetName)+'" sheetId="1" r:id="rId1"/></sheets></workbook>'),
+    f('xl/_rels/workbook.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'+
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'),
+    f('xl/styles.xml',styles),
+    f('xl/worksheets/sheet1.xml',sheet)
+  ]);
+}
+
+function saveBlob(u8,filename){
+  const blob=new Blob([u8],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=filename; document.body.appendChild(a); a.click();
+  setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},1200);
+}
+
+/* 화면에 보이는 표를 그대로 (반올림 전 원본값으로) 엑셀에 담는다 */
+function exportXlsx(){
+  const A=aggregate();
+  const N=(v,s)=>({v:(Math.round(v*100)/100),t:'n',s:s||1});
+  const P=v=>(v==null||!isFinite(v))?null:{v:(Math.round(v*100000)/100000),t:'n',s:2};
+  const S=(v,s)=>({v:v,t:'s',s:s||0});
+  const rows=[];
+  let head,body=[],foot,widths,title,fname;
+
+  if(ST.tab==='sale'){
+    const amt=ST.metric==='amt', vi=amt?3:2, unit=amt?'천원':'개';
+    const days=A.curDates.slice().reverse();
+    const list=Object.keys(A.M).map(k=>+k).map(pi=>{
+      const m=A.M[pi],p=PRODS[pi];
+      const c=amt?m.cAmt:m.cQty, q=amt?m.pAmt:m.pQty;
+      return {pi,big:p[1],mid:p[2],name:p[0],cmp:q,cur:c,diff:c-q,gr:q?(c-q)/q:null};
+    }).filter(r=>r.cur||r.cmp);
+    list.sort((a,b)=>b.cur-a.cur);
+    const sC=list.reduce((s,r)=>s+r.cur,0), sP=list.reduce((s,r)=>s+r.cmp,0);
+
+    title='판매 수량 및 금액 — 순'+(amt?'금액':'수량')+' (단위: '+unit+')';
+    head=['대유형','중유형','상품명','비교기간','비중','조회기간','비중','증감','성장률'].concat(days.map(md));
+    list.forEach(r=>{
+      const m=A.M[r.pi];
+      body.push([S(r.big),S(r.mid),S(r.name),N(r.cmp),P(sP?r.cmp/sP:null),N(r.cur),P(sC?r.cur/sC:null),
+        N(r.diff),P(r.gr)].concat(days.map(d=>{const a=m.days[d];return a&&a[vi]?N(a[vi]):null;})));
+    });
+    foot=[S('계',4),null,null,N(sP),null,N(sC),null,N(sC-sP),P(sP?(sC-sP)/sP:null)]
+      .concat(days.map(d=>{let v=0;list.forEach(r=>{const a=A.M[r.pi].days[d];if(a)v+=a[vi];});return v?N(v):null;}));
+    widths=[10,12,30,13,9,13,9,13,10].concat(days.map(()=>11));
+    fname='네이버실적_판매_'+(amt?'금액':'수량')+'_'+A.d1+'~'+A.d2+'.xlsx';
+  }else{
+    const list=Object.keys(A.M).map(k=>+k).map(pi=>{
+      const m=A.M[pi],p=PRODS[pi];
+      const cr=m.cVis?m.cOrd/m.cVis:null, pr=m.pVis?m.pOrd/m.pVis:null;
+      return {pi,big:p[1],mid:p[2],name:p[0],pv:m.pVis,po:m.pOrd,pr,cv:m.cVis,co:m.cOrd,cr,
+        dv:m.cVis-m.pVis,dq:m.cOrd-m.pOrd,dr:(cr!=null&&pr!=null)?cr-pr:null,
+        rv:m.pVis?(m.cVis-m.pVis)/m.pVis:null, ro:m.pOrd?(m.cOrd-m.pOrd)/m.pOrd:null};
+    }).filter(r=>r.cv||r.pv||r.co||r.po);
+    const key=ST.metric;
+    list.sort((a,b)=> key==='ord'?(b.co-a.co) : key==='cvr'?((b.cr||0)-(a.cr||0)) : (b.cv-a.cv));
+    const T={pv:0,po:0,cv:0,co:0};
+    list.forEach(r=>{T.pv+=r.pv;T.po+=r.po;T.cv+=r.cv;T.co+=r.co;});
+    const Tpr=T.pv?T.po/T.pv:null, Tcr=T.cv?T.co/T.cv:null;
+    const dr=(Tcr!=null&&Tpr!=null)?Tcr-Tpr:null;
+
+    title='조회건수 및 전환률';
+    head=['대유형','중유형','상품명','비교방문','비교결제건','비교전환률','조회방문','조회결제건','조회전환률',
+          '증감방문','증감결제건','증감전환률(%p)','증감률방문','증감률결제건'];
+    list.forEach(r=>body.push([S(r.big),S(r.mid),S(r.name),N(r.pv),N(r.po),P(r.pr),
+      N(r.cv),N(r.co),P(r.cr),N(r.dv),N(r.dq),P(r.dr),P(r.rv),P(r.ro)]));
+    foot=[S('계',4),null,null,N(T.pv),N(T.po),P(Tpr),N(T.cv),N(T.co),P(Tcr),
+      N(T.cv-T.pv),N(T.co-T.po),P(dr),P(T.pv?(T.cv-T.pv)/T.pv:null),P(T.po?(T.co-T.po)/T.po:null)];
+    widths=[10,12,30,11,12,12,11,12,12,11,12,15,12,13];
+    fname='네이버실적_전환_'+A.d1+'~'+A.d2+'.xlsx';
+  }
+
+  rows.push([S(title,4)]);
+  rows.push([S('조회기간 '+A.d1+' ~ '+A.d2+'   |   비교기간(전년) '+A.c1+' ~ '+A.c2+
+              '   |   유형 '+([...ST.big].join(', ')||'없음')+'   |   생성 '+BUILT)]);
+  rows.push([]);
+  rows.push(head.map(h=>S(h,3)));
+  body.forEach(r=>rows.push(r));
+  rows.push(foot);
+
+  saveBlob(buildXlsx(rows,ST.tab==='sale'?'판매':'전환',widths),fname);
+  return fname;
+}
+
 function bindRows(){
   $('#tbl').querySelectorAll('tbody tr[data-pi]').forEach(tr=>{
     tr.addEventListener('click',()=>{
@@ -638,6 +830,15 @@ function init(){
   $('#tabConv').addEventListener('click',()=>setTab('conv'));
   $('#bAllOn').addEventListener('click',()=>{BIGS.forEach(b=>ST.big.add(b));buildChips();render();});
   $('#bAllOff').addEventListener('click',()=>{ST.big.clear();buildChips();render();});
+  $('#btnXlsx').addEventListener('click',()=>{
+    const b=$('#btnXlsx'), old=b.textContent;
+    b.disabled=true; b.textContent='만드는 중…';
+    setTimeout(()=>{
+      try{ exportXlsx(); b.textContent='내려받음 ✓'; }
+      catch(e){ b.textContent='실패'; alert('엑셀 생성 중 오류가 발생했습니다.\n'+e.message); }
+      setTimeout(()=>{b.disabled=false;b.textContent=old;},1600);
+    },30);
+  });
   window.addEventListener('online',()=>$('#badge').className='badge');
   let rt; window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(render,180);});
   buildChips(); buildToggle(); render();
