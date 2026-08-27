@@ -62,7 +62,16 @@ input[type=date]{border:1px solid var(--line);border-radius:6px;padding:6px 8px;
 .mini{border:1px solid var(--line);background:#fff;border-radius:6px;padding:0 11px;
   min-height:32px;font-size:11.5px;cursor:pointer;font-family:inherit;color:var(--txt2);font-weight:600;}
 .mini:active{background:var(--line2);}
+.mon{border:1px solid var(--line);background:#fff;border-radius:6px;padding:0 10px;
+  min-height:30px;font-size:11.5px;cursor:pointer;font-family:inherit;color:var(--txt2);font-weight:600;}
+.mon:hover{background:var(--line2);}
+.mon.on{background:var(--blue);border-color:var(--blue);color:#fff;}
 .unit{font-size:11px;color:var(--gray);}
+/* 비교기간에 데이터가 비는 구간이 있을 때만 나타나는 경고 */
+.warn{display:none;font-size:11px;color:#9A3412;background:#FFF4E5;border:1px solid #F5C99B;
+  border-radius:6px;padding:5px 9px;margin-top:2px;max-width:520px;line-height:1.5;}
+.warn.on{display:block;}
+.warn b{color:#7C2D12;}
 
 /* ── 탭 ── */
 .tabs{display:flex;gap:6px;margin-bottom:12px;}
@@ -171,7 +180,17 @@ tfoot td.fx1,tfoot td.fx2,tfoot td.fx3{z-index:7;background:#EDF2F9;}
         <button class="mini" id="btnThis">당월</button>
         <button class="mini" id="btnAll">전체</button>
       </div>
+      <div class="frow" id="monRow"><span class="unit" style="margin-right:2px">월 바로가기</span></div>
       <div class="unit" id="cmpline"></div>
+      <div class="warn" id="cmpwarn"></div>
+    </div>
+    <div class="fgrp">
+      <div class="flab">보기 단위</div>
+      <div class="frow">
+        <div class="tog">
+          <button id="tgDay" class="on">일별</button><button id="tgMon">월별</button>
+        </div>
+      </div>
     </div>
     <div class="fgrp">
       <div class="flab">지표</div>
@@ -229,7 +248,11 @@ const nf=(v,d=0)=>(v==null||isNaN(v))?'':Number(v).toLocaleString('ko-KR',{minim
 const pct=v=>(v==null||!isFinite(v))?'':(v*100).toFixed(1)+'%';
 const cls=v=>v>0?'up':(v<0?'dn':'');
 const md=s=>{const p=s.split('-');return (+p[1])+'/'+(+p[2]);};
-const shiftY=(s,n)=>{const p=s.split('-');return (+p[0]+n)+'-'+p[1]+'-'+p[2];};
+/* 일자키('2026-08-01')와 월키('2026-08') 양쪽에 모두 쓰는 유틸 */
+const shiftY=(s,n)=>{const p=s.split('-');p[0]=+p[0]+n;return p.join('-');};
+const isMon=s=>s.length===7;
+const kLabel=s=>isMon(s)?((+s.slice(5,7))+'월'):md(s);
+const kOf=d=>ST.gran==='month'?d.slice(0,7):d;
 
 /* 지표 정의 : key → [라벨, 단위, rows 인덱스(비율이면 null), 소수자리] */
 const METRIC={
@@ -239,8 +262,8 @@ const METRIC={
 const TABMET={sale:['amt','qty'], conv:['vis','ord','cvr']};
 const BIG_ORDER=['드라이어','고데기','헤어롤','기타'];
 
-let DATES,PRODS,ROWS,BUILT,SRCN,BIGS;
-const ST={metric:'amt', tab:'sale', big:new Set(), sel:null};
+let DATES,PRODS,ROWS,BUILT,SRCN,BIGS,CUR_YEAR,PREV_RANGE=null;
+const ST={metric:'amt', tab:'sale', big:new Set(), sel:null, gran:'day'};
 let LAST,FIRST_OF_MONTH;
 
 /* ───────── 데이터 로드 (인라인 → 없으면 data.json) ───────── */
@@ -264,7 +287,9 @@ async function boot(){
   BIGS=BIG_ORDER.filter(b=>set.has(b)).concat([...set].filter(b=>!BIG_ORDER.includes(b)).sort());
   BIGS.forEach(b=>ST.big.add(b));
 
-  LAST=DATES.filter(d=>d>='2026-01-01').slice(-1)[0]||DATES[DATES.length-1];
+  /* 기준 연도는 데이터에서 뽑는다 (연도를 박아두면 해가 바뀔 때 손봐야 한다) */
+  LAST=DATES[DATES.length-1];
+  CUR_YEAR=LAST.slice(0,4);
   FIRST_OF_MONTH=LAST.slice(0,8)+'01';
 
   $('#loading').style.display='none';
@@ -292,6 +317,29 @@ function buildChips(){
     box.appendChild(el);
   });
 }
+/* 월 바로가기 — 클릭하면 그 달만 조회한다. 데이터가 있는 날짜까지만 잡으므로
+   진행 중인 달은 자동으로 '1일 ~ 마지막 보유일' 이 된다. */
+let MONTHS=[];
+function buildMonths(){
+  const box=$('#monRow');
+  MONTHS=[...new Set(DATES.filter(d=>d.startsWith(CUR_YEAR)).map(d=>d.slice(0,7)))].sort();
+  MONTHS.forEach(m=>{
+    const days=DATES.filter(d=>d.startsWith(m));
+    const a=days[0], b=days[days.length-1];
+    const btn=document.createElement('button');
+    btn.className='mon'; btn.dataset.a=a; btn.dataset.b=b;
+    btn.textContent=(+m.slice(5,7))+'월';
+    btn.addEventListener('click',()=>{ $('#d1').value=a; $('#d2').value=b; render(); });
+    box.appendChild(btn);
+  });
+}
+function markMonth(){
+  const a=$('#d1').value, b=$('#d2').value;
+  $('#monRow').querySelectorAll('.mon').forEach(btn=>{
+    btn.className='mon'+((btn.dataset.a===a&&btn.dataset.b===b)?' on':'');
+  });
+}
+
 function buildToggle(){
   const box=$('#togBox'); box.innerHTML='';
   TABMET[ST.tab].forEach(k=>{
@@ -316,9 +364,12 @@ function aggregate(){
   const M={};
   const mk=()=>({cQty:0,cAmt:0,cVis:0,cOrd:0,pQty:0,pAmt:0,pVis:0,pOrd:0,days:{},pdays:{}});
   const tot=mk();
+  /* 일별이면 키가 일자, 월별이면 키가 월(YYYY-MM). 아래 집계·표·그래프가 모두 이 키를 쓴다 */
+  const curKeys=[...new Set(curDates.map(kOf))];
+  const cmpKeys=[...new Set(cmpDates.map(kOf))];
   const curSeries={}, cmpSeries={};
-  curDates.forEach(d=>curSeries[d]=[0,0,0,0,0,0]);
-  cmpDates.forEach(d=>cmpSeries[d]=[0,0,0,0,0,0]);
+  curKeys.forEach(k=>curSeries[k]=[0,0,0,0,0,0]);
+  cmpKeys.forEach(k=>cmpSeries[k]=[0,0,0,0,0,0]);
 
   for(let k=0;k<ROWS.length;k++){
     const r=ROWS[k], pi=r[1];
@@ -327,22 +378,23 @@ function aggregate(){
     const isC=inCur.has(d), isP=inCmp.has(d);
     if(!isC&&!isP) continue;
     let m=M[pi]; if(!m){m=M[pi]=mk();}
+    const bk=kOf(d);                      // 이 행이 들어갈 칸(일자 또는 월)
     if(isC){
       m.cQty+=r[2]; m.cAmt+=r[3]; m.cVis+=r[4]; m.cOrd+=r[5];
-      let a=m.days[d]; if(!a){a=m.days[d]=[0,0,0,0,0,0];}
+      let a=m.days[bk]; if(!a){a=m.days[bk]=[0,0,0,0,0,0];}
       a[2]+=r[2];a[3]+=r[3];a[4]+=r[4];a[5]+=r[5];
       tot.cQty+=r[2]; tot.cAmt+=r[3]; tot.cVis+=r[4]; tot.cOrd+=r[5];
-      const s=curSeries[d]; s[2]+=r[2];s[3]+=r[3];s[4]+=r[4];s[5]+=r[5];
+      const s=curSeries[bk]; if(s){s[2]+=r[2];s[3]+=r[3];s[4]+=r[4];s[5]+=r[5];}
     }
     if(isP){
       m.pQty+=r[2]; m.pAmt+=r[3]; m.pVis+=r[4]; m.pOrd+=r[5];
-      let a=m.pdays[d]; if(!a){a=m.pdays[d]=[0,0,0,0,0,0];}
+      let a=m.pdays[bk]; if(!a){a=m.pdays[bk]=[0,0,0,0,0,0];}
       a[2]+=r[2];a[3]+=r[3];a[4]+=r[4];a[5]+=r[5];
       tot.pQty+=r[2]; tot.pAmt+=r[3]; tot.pVis+=r[4]; tot.pOrd+=r[5];
-      const s=cmpSeries[d]; s[2]+=r[2];s[3]+=r[3];s[4]+=r[4];s[5]+=r[5];
+      const s=cmpSeries[bk]; if(s){s[2]+=r[2];s[3]+=r[3];s[4]+=r[4];s[5]+=r[5];}
     }
   }
-  return {M,tot,curDates,cmpDates,curSeries,cmpSeries,d1,d2,c1,c2};
+  return {M,tot,curDates,cmpDates,curKeys,cmpKeys,curSeries,cmpSeries,d1,d2,c1,c2};
 }
 
 /* 일자 배열에서 현재 지표값 뽑기 (cvr 은 결제건수/방문수) */
@@ -402,19 +454,22 @@ function renderChart(A){
   const svg=$('#chart'), tip=$('#tip');
   const [lab,unit,,dec]=METRIC[ST.metric];
   const isCvr=ST.metric==='cvr';
-  const n=A.curDates.length;
-  $('#chartTitle').textContent='일자별 추이 — '+lab+(unit?' ('+unit+')':'');
+  const keys=A.curKeys;
+  const n=keys.length;
+  $('#chartTitle').textContent=(ST.gran==='month'?'월별':'일자별')+' 추이 — '+lab+(unit?' ('+unit+')':'');
   svg.innerHTML='';
   if(!n){svg.innerHTML='<text x="50%" y="50%" text-anchor="middle" fill="#98A2B0" font-size="13">조회기간에 데이터가 없습니다</text>';return;}
 
+  /* 조회↔비교 대응은 '전년 같은 날짜(월)' 로 직접 찾는다.
+     예전처럼 인덱스로 맞추면 전년 데이터가 비는 구간에서 한 칸씩 밀린다. */
   let cur,cmp;
   if(ST.sel==null){
-    cur=A.curDates.map(d=>pick(A.curSeries[d]));
-    cmp=A.curDates.map((d,i)=>{const cd=A.cmpDates[i];return cd?pick(A.cmpSeries[cd]):0;});
+    cur=keys.map(k=>pick(A.curSeries[k]));
+    cmp=keys.map(k=>pick(A.cmpSeries[shiftY(k,-1)]));
   }else{
     const m=A.M[ST.sel]||{days:{},pdays:{}};
-    cur=A.curDates.map(d=>pick(m.days[d]));
-    cmp=A.curDates.map((d,i)=>{const cd=A.cmpDates[i];return cd?pick(m.pdays[cd]):0;});
+    cur=keys.map(k=>pick(m.days[k]));
+    cmp=keys.map(k=>pick(m.pdays[shiftY(k,-1)]));
   }
 
   const mob=window.innerWidth<=760;
@@ -443,7 +498,7 @@ function renderChart(A){
   const skip=Math.ceil(n/(mob?8:16));
   for(let i=0;i<n;i++){
     if(i%skip) continue;
-    g+='<text x="'+X(i).toFixed(1)+'" y="'+(H-13)+'" text-anchor="middle" font-size="10" fill="#7A8593">'+md(A.curDates[i])+'</text>';
+    g+='<text x="'+X(i).toFixed(1)+'" y="'+(H-13)+'" text-anchor="middle" font-size="10" fill="#7A8593">'+kLabel(keys[i])+'</text>';
   }
 
   // 완만한 곡선 (Catmull-Rom → Cubic Bezier)
@@ -489,7 +544,7 @@ function renderChart(A){
     gl.setAttribute('x1',X(i)); gl.setAttribute('x2',X(i)); gl.setAttribute('opacity','1');
     const c=cur[i],p=cmp[i],diff=c-p,gr=p?diff/p:null;
     const u=unit?(' '+unit):'';
-    tip.innerHTML='<b>'+A.curDates[i]+'</b><br>조회 <b>'+fmt(c)+'</b>'+u+
+    tip.innerHTML='<b>'+keys[i]+(isMon(keys[i])?' (월계)':'')+'</b><br>조회 <b>'+fmt(c)+'</b>'+u+
       '<br>비교 '+fmt(p)+u+
       '<br>증감 <span class="'+(diff<0?'r':'b')+'">'+(diff>0?'+':'')+fmt(diff)+(isCvr?'%p':u)+'</span>'+
       '<br>성장률 <span class="'+(diff<0?'r':'b')+'">'+(gr==null?'-':((gr>0?'+':'')+pct(gr)))+'</span>';
@@ -509,7 +564,8 @@ function renderChart(A){
 /* ───────── 판매 표 ───────── */
 function renderSaleTable(A){
   const amt=ST.metric==='amt', vi=amt?3:2, unit=amt?'천원':'개';
-  const days=A.curDates.slice().reverse();
+  /* 일별은 최신순(양식 기준), 월별은 흐름을 읽기 쉽게 1월→최근월 순 */
+  const days=ST.gran==='month'?A.curKeys.slice():A.curKeys.slice().reverse();
   const list=Object.keys(A.M).map(k=>+k).map(pi=>{
     const m=A.M[pi], p=PRODS[pi];
     const c=amt?m.cAmt:m.cQty, q=amt?m.pAmt:m.pQty;
@@ -521,7 +577,7 @@ function renderSaleTable(A){
   let h='<thead><tr>'+
     '<th class="fx1">대유형</th><th class="fx2">중유형</th><th class="fx3">상품명</th>'+
     '<th>비교기간</th><th>비중</th><th>조회기간</th><th>비중</th><th>증감</th><th>성장률</th>';
-  days.forEach(d=>h+='<th>'+md(d)+'</th>');
+  days.forEach(d=>h+='<th>'+kLabel(d)+'</th>');
   h+='</tr></thead><tbody>';
   if(!list.length) h+='<tr><td colspan="'+(9+days.length)+'" class="empty">조건에 맞는 데이터가 없습니다</td></tr>';
   list.forEach(r=>{
@@ -549,7 +605,9 @@ function renderSaleTable(A){
   $('#tbl').className='';
   $('#tblTitle').textContent='판매 수량 및 금액 — 순'+(amt?'금액 (천원)':'수량 (개)');
   $('#tblNote').innerHTML='· 순금액 = 판매금액(순) ÷ 1,000 &nbsp;|&nbsp; 순수량 = 상품결제건수 − 환불건수 &nbsp;|&nbsp; 단위: '+unit+'<br>'+
-    '· 비교기간 '+A.c1+' ~ '+A.c2+' (전년 동일 일자) · 일자별 열은 조회기간 최신순 · 표시값은 정수 반올림';
+    '· 비교기간 '+A.c1+' ~ '+A.c2+' (전년 동일 일자) · '+
+    (ST.gran==='month'?'월별 열은 1월→최근월 순(각 월 합계)':'일자별 열은 조회기간 최신순')+
+    ' · 표시값은 정수 반올림';
   bindRows();
 }
 
@@ -727,7 +785,7 @@ function exportXlsx(){
 
   if(ST.tab==='sale'){
     const amt=ST.metric==='amt', vi=amt?3:2, unit=amt?'천원':'개';
-    const days=A.curDates.slice().reverse();
+    const days=ST.gran==='month'?A.curKeys.slice():A.curKeys.slice().reverse();
     const list=Object.keys(A.M).map(k=>+k).map(pi=>{
       const m=A.M[pi],p=PRODS[pi];
       const c=amt?m.cAmt:m.cQty, q=amt?m.pAmt:m.pQty;
@@ -737,7 +795,7 @@ function exportXlsx(){
     const sC=list.reduce((s,r)=>s+r.cur,0), sP=list.reduce((s,r)=>s+r.cmp,0);
 
     title='판매 수량 및 금액 — 순'+(amt?'금액':'수량')+' (단위: '+unit+')';
-    head=['대유형','중유형','상품명','비교기간','비중','조회기간','비중','증감','성장률'].concat(days.map(md));
+    head=['대유형','중유형','상품명','비교기간','비중','조회기간','비중','증감','성장률'].concat(days.map(kLabel));
     list.forEach(r=>{
       const m=A.M[r.pi];
       body.push([S(r.big),S(r.mid),S(r.name),N(r.cmp),P(sP?r.cmp/sP:null),N(r.cur),P(sC?r.cur/sC:null),
@@ -796,15 +854,49 @@ function bindRows(){
 }
 
 /* ───────── 렌더 ───────── */
+const dayDiff=(a,b)=>Math.round((new Date(b)-new Date(a))/86400000)+1;
+
+/* 비교기간에 데이터가 없는 날이 섞이면 전년 대비가 과장된다. 그 사실을 화면에 알린다. */
+function checkCmp(A){
+  const el=$('#cmpwarn');
+  const want=dayDiff(A.c1,A.c2), have=A.cmpDates.length;
+  if(have>=want || want<=0){ el.className='warn'; el.innerHTML=''; return; }
+  const first=DATES[0];
+  const miss=want-have;
+  let where='';
+  if(A.c1<first && first<=A.c2) where=A.c1+' ~ '+DATES.filter(d=>d<first).length+'';
+  el.className='warn on';
+  el.innerHTML='비교기간 '+want+'일 중 <b>'+miss+'일치 데이터가 없습니다</b>'+
+    (A.c1<first?' (보유 시작일 '+first+')':'')+
+    '. 전년 대비 증감·성장률이 실제보다 <b>크게</b> 나옵니다.';
+}
+
 function render(){
   const A=aggregate();
   $('#cmpline').textContent='비교기간(전년): '+A.c1+' ~ '+A.c2;
+  checkCmp(A); markMonth();
   const u=METRIC[ST.metric][1];
   $('#unitline').textContent=u?('단위: '+u):'단위: 건';
   $('#selInfo').textContent=(ST.sel==null)?'전체 합계':('선택: '+PRODS[ST.sel][0]);
   renderKpi(A);
   renderChart(A);
   if(ST.tab==='sale') renderSaleTable(A); else renderConvTable(A);
+}
+
+/* 일별 ↔ 월별. 월별로 바꿀 때는 올해 전체가 한눈에 들어오도록 기간을 넓힌다 */
+function setGran(g){
+  if(ST.gran===g) return;
+  ST.gran=g;
+  $('#tgDay').className=(g==='day'?'on':'');
+  $('#tgMon').className=(g==='month'?'on':'');
+  if(g==='month'){
+    PREV_RANGE=[$('#d1').value,$('#d2').value];
+    const y26=DATES.filter(d=>d>=CUR_YEAR+'-01-01');
+    $('#d1').value=(y26[0]||DATES[0]); $('#d2').value=LAST;
+  }else if(PREV_RANGE){
+    $('#d1').value=PREV_RANGE[0]; $('#d2').value=PREV_RANGE[1]; PREV_RANGE=null;
+  }
+  render();
 }
 
 function setTab(t){
@@ -824,10 +916,12 @@ function init(){
   $('#d2').addEventListener('change',render);
   $('#btnThis').addEventListener('click',()=>{$('#d1').value=FIRST_OF_MONTH;$('#d2').value=LAST;render();});
   $('#btnAll').addEventListener('click',()=>{
-    const y26=DATES.filter(d=>d>='2026-01-01');
-    $('#d1').value=(y26[0]||DATES[0]); $('#d2').value=LAST; render();});
+    const yr=DATES.filter(d=>d>=CUR_YEAR+'-01-01');
+    $('#d1').value=(yr[0]||DATES[0]); $('#d2').value=LAST; render();});
   $('#tabSale').addEventListener('click',()=>setTab('sale'));
   $('#tabConv').addEventListener('click',()=>setTab('conv'));
+  $('#tgDay').addEventListener('click',()=>setGran('day'));
+  $('#tgMon').addEventListener('click',()=>setGran('month'));
   $('#bAllOn').addEventListener('click',()=>{BIGS.forEach(b=>ST.big.add(b));buildChips();render();});
   $('#bAllOff').addEventListener('click',()=>{ST.big.clear();buildChips();render();});
   $('#btnXlsx').addEventListener('click',()=>{
@@ -841,7 +935,7 @@ function init(){
   });
   window.addEventListener('online',()=>$('#badge').className='badge');
   let rt; window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(render,180);});
-  buildChips(); buildToggle(); render();
+  buildChips(); buildToggle(); buildMonths(); render();
 }
 
 boot();
