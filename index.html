@@ -564,8 +564,8 @@ function renderChart(A){
 /* ───────── 판매 표 ───────── */
 function renderSaleTable(A){
   const amt=ST.metric==='amt', vi=amt?3:2, unit=amt?'천원':'개';
-  /* 일별은 최신순(양식 기준), 월별은 흐름을 읽기 쉽게 1월→최근월 순 */
-  const days=ST.gran==='month'?A.curKeys.slice():A.curKeys.slice().reverse();
+  /* 일별·월별 모두 오름차순(과거→최근) */
+  const days=A.curKeys.slice();
   const list=Object.keys(A.M).map(k=>+k).map(pi=>{
     const m=A.M[pi], p=PRODS[pi];
     const c=amt?m.cAmt:m.cQty, q=amt?m.pAmt:m.pQty;
@@ -606,7 +606,7 @@ function renderSaleTable(A){
   $('#tblTitle').textContent='판매 수량 및 금액 — 순'+(amt?'금액 (천원)':'수량 (개)');
   $('#tblNote').innerHTML='· 순금액 = 판매금액(순) ÷ 1,000 &nbsp;|&nbsp; 순수량 = 상품결제건수 − 환불건수 &nbsp;|&nbsp; 단위: '+unit+'<br>'+
     '· 비교기간 '+A.c1+' ~ '+A.c2+' (전년 동일 일자) · '+
-    (ST.gran==='month'?'월별 열은 1월→최근월 순(각 월 합계)':'일자별 열은 조회기간 최신순')+
+    (ST.gran==='month'?'월별 열은 오름차순(각 월 합계)':'일자별 열은 오름차순')+
     ' · 표시값은 정수 반올림';
   bindRows();
 }
@@ -785,7 +785,7 @@ function exportXlsx(){
 
   if(ST.tab==='sale'){
     const amt=ST.metric==='amt', vi=amt?3:2, unit=amt?'천원':'개';
-    const days=ST.gran==='month'?A.curKeys.slice():A.curKeys.slice().reverse();
+    const days=A.curKeys.slice();
     const list=Object.keys(A.M).map(k=>+k).map(pi=>{
       const m=A.M[pi],p=PRODS[pi];
       const c=amt?m.cAmt:m.cQty, q=amt?m.pAmt:m.pQty;
