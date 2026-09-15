@@ -129,9 +129,13 @@ tbody tr.sel .fx1,tbody tr.sel .fx2,tbody tr.sel .fx3{background:#E3EEFC;}
 .cmp{color:var(--gray);}
 .up{color:var(--up);} .dn{color:var(--down);}
 .dcol{color:#5A6675;}
-tfoot td{position:sticky;bottom:0;background:#EDF2F9;font-weight:800;
-  border-top:2px solid var(--head);z-index:5;}
-tfoot td.fx1,tfoot td.fx2,tfoot td.fx3{z-index:7;background:#EDF2F9;}
+/* 계 행은 머리글 바로 아래에 붙여 고정한다 (--hh = 머리글 높이, JS가 실측해 채움) */
+thead tr.sum td{position:sticky;top:var(--hh,24px);background:#EDF2F9;color:var(--txt);
+  font-weight:800;border-bottom:2px solid var(--head);z-index:6;text-align:right;}
+thead tr.sum td.tl{text-align:left;}
+thead tr.sum td.up{color:var(--up);}      /* 계 행도 증감 색을 그대로 */
+thead tr.sum td.dn{color:var(--down);}
+thead tr.sum td.fx1,thead tr.sum td.fx2,thead tr.sum td.fx3{z-index:8;background:#EDF2F9;}
 .empty{padding:40px;text-align:center;color:var(--gray);font-size:13px;}
 .note{font-size:10px;color:var(--gray);margin-top:3px;line-height:1.5;}
 .loading{padding:60px 20px;text-align:center;color:var(--gray);font-size:13.5px;}
@@ -574,11 +578,12 @@ function renderSaleTable(A){
   list.sort((a,b)=>b.cur-a.cur);
   const sC=list.reduce((s,r)=>s+r.cur,0), sP=list.reduce((s,r)=>s+r.cmp,0);
 
-  let h='<thead><tr>'+
+  let head='<tr>'+
     '<th class="fx1">대유형</th><th class="fx2">중유형</th><th class="fx3">상품명</th>'+
     '<th>비교기간</th><th>비중</th><th>조회기간</th><th>비중</th><th>증감</th><th>성장률</th>';
-  days.forEach(d=>h+='<th>'+kLabel(d)+'</th>');
-  h+='</tr></thead><tbody>';
+  days.forEach(d=>head+='<th>'+kLabel(d)+'</th>');
+  head+='</tr>';
+  let h='<tbody>';
   if(!list.length) h+='<tr><td colspan="'+(9+days.length)+'" class="empty">조건에 맞는 데이터가 없습니다</td></tr>';
   list.forEach(r=>{
     const m=A.M[r.pi];
@@ -591,18 +596,20 @@ function renderSaleTable(A){
     days.forEach(d=>{const a=m.days[d];const v=a?a[vi]:0;h+='<td class="dcol">'+(v?nf(v):'')+'</td>';});
     h+='</tr>';
   });
-  h+='</tbody><tfoot><tr>'+
+  h+='</tbody>';
+  let sum='<tr class="sum">'+
     '<td class="tl fx1">계</td><td class="fx2"></td><td class="tl fx3">계</td>'+
     '<td>'+nf(sP)+'</td><td></td><td>'+nf(sC)+'</td><td></td>'+
     '<td class="'+cls(sC-sP)+'">'+((sC-sP)>0?'+':'')+nf(sC-sP)+'</td>'+
     '<td class="'+cls(sC-sP)+'">'+(sP?(((sC-sP)>0?'+':'')+pct((sC-sP)/sP)):'')+'</td>';
   days.forEach(d=>{
     let v=0; list.forEach(r=>{const a=A.M[r.pi].days[d]; if(a) v+=a[vi];});
-    h+='<td>'+(v?nf(v):'')+'</td>';
+    sum+='<td>'+(v?nf(v):'')+'</td>';
   });
-  h+='</tr></tfoot>';
-  $('#tbl').innerHTML=h;
+  sum+='</tr>';
+  $('#tbl').innerHTML='<thead>'+head+sum+'</thead>'+h;
   $('#tbl').className='';
+  fixSumTop();
   $('#tblTitle').textContent='판매 수량 및 금액 — 순'+(amt?'금액 (천원)':'수량 (개)');
   $('#tblNote').innerHTML='· 순금액 = 판매금액(순) ÷ 1,000 &nbsp;|&nbsp; 순수량 = 상품결제건수 − 환불건수 &nbsp;|&nbsp; 단위: '+unit+'<br>'+
     '· 비교기간 '+A.c1+' ~ '+A.c2+' (전년 동일 일자) · '+
@@ -631,7 +638,8 @@ function renderConvTable(A){
   const HD=['대유형','중유형','상품명','비교방문','비교결제건','비교전환률',
             '조회방문','조회결제건','조회전환률','증감방문','증감결제건','증감전환률',
             '증감률방문','증감률결제건'];
-  let h='<thead><tr>'+HD.map((t,i)=>'<th'+(i<3?' class="fx'+(i+1)+'"':'')+'>'+t+'</th>').join('')+'</tr></thead><tbody>';
+  const head='<tr>'+HD.map((t,i)=>'<th'+(i<3?' class="fx'+(i+1)+'"':'')+'>'+t+'</th>').join('')+'</tr>';
+  let h='<tbody>';
   if(!list.length) h+='<tr><td colspan="14" class="empty">조건에 맞는 데이터가 없습니다</td></tr>';
   list.forEach(r=>{
     h+='<tr data-pi="'+r.pi+'"'+(ST.sel===r.pi?' class="sel"':'')+'>'+
@@ -645,16 +653,18 @@ function renderConvTable(A){
       '<td class="'+cls(r.ro)+'">'+(r.ro==null?'':((r.ro>0?'+':'')+pct(r.ro)))+'</td></tr>';
   });
   const dv=T.cv-T.pv, dq=T.co-T.po, dr=(Tcr!=null&&Tpr!=null)?Tcr-Tpr:null;
-  h+='</tbody><tfoot><tr><td class="tl fx1">계</td><td class="fx2"></td><td class="tl fx3">계</td>'+
+  h+='</tbody>';
+  const sum='<tr class="sum"><td class="tl fx1">계</td><td class="fx2"></td><td class="tl fx3">계</td>'+
     '<td>'+nf(T.pv)+'</td><td>'+nf(T.po)+'</td><td>'+(Tpr==null?'':pct(Tpr))+'</td>'+
     '<td>'+nf(T.cv)+'</td><td>'+nf(T.co)+'</td><td>'+(Tcr==null?'':pct(Tcr))+'</td>'+
     '<td class="'+cls(dv)+'">'+(dv>0?'+':'')+nf(dv)+'</td>'+
     '<td class="'+cls(dq)+'">'+(dq>0?'+':'')+nf(dq)+'</td>'+
     '<td class="'+cls(dr)+'">'+(dr==null?'':((dr>0?'+':'')+(dr*100).toFixed(1)))+'</td>'+
     '<td class="'+cls(dv)+'">'+(T.pv?((dv>0?'+':'')+pct(dv/T.pv)):'')+'</td>'+
-    '<td class="'+cls(dq)+'">'+(T.po?((dq>0?'+':'')+pct(dq/T.po)):'')+'</td></tr></tfoot>';
-  $('#tbl').innerHTML=h;
+    '<td class="'+cls(dq)+'">'+(T.po?((dq>0?'+':'')+pct(dq/T.po)):'')+'</td></tr>';
+  $('#tbl').innerHTML='<thead>'+head+sum+'</thead>'+h;
   $('#tbl').className='conv';
+  fixSumTop();
   $('#tblTitle').textContent='조회건수 및 전환률';
   $('#tblNote').innerHTML='· 전환률 = 결제건수 ÷ 방문수 (기간 합계로 재계산) · 증감전환률의 단위는 %p(퍼센트포인트)<br>'+
     '· 비교기간 '+A.c1+' ~ '+A.c2+' · 25년 데이터는 2025-03-01부터 보유 · 정렬 기준은 위 지표 토글을 따릅니다';
@@ -841,6 +851,12 @@ function exportXlsx(){
 
   saveBlob(buildXlsx(rows,ST.tab==='sale'?'판매':'전환',widths),fname);
   return fname;
+}
+
+/* 머리글 높이를 실측해 계 행의 고정 위치(--hh)를 맞춘다 */
+function fixSumTop(){
+  const tb=$('#tbl'), h1=tb.querySelector('thead tr:first-child');
+  if(h1&&h1.offsetHeight) tb.style.setProperty('--hh', h1.offsetHeight+'px');
 }
 
 function bindRows(){
