@@ -31,11 +31,15 @@ h1{font-size:16px;margin:0 0 1px;letter-spacing:-.4px;color:var(--navy);font-wei
   padding:6px 10px;margin-bottom:5px;box-shadow:0 1px 3px rgba(20,40,80,.05);}
 .card h2{font-size:12px;margin:0 0 4px;color:var(--head);font-weight:700;
   padding-left:9px;border-left:3px solid var(--blue);letter-spacing:-.2px;}
-.cardhd{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
-.cardhd h2{margin-bottom:11px;}
+.cardhd{display:flex;align-items:center;justify-content:flex-start;gap:12px;flex-wrap:wrap;}
+.cardhd h2{margin-bottom:4px;}
+.chk{display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;
+  user-select:none;color:var(--txt2);font-weight:600;margin-bottom:4px;}
+.chk input{width:14px;height:14px;cursor:pointer;accent-color:var(--blue);}
+.chk.dis{opacity:.4;cursor:not-allowed;}
 .xlsx{border:1px solid #1E7A45;background:#1E7A45;color:#fff;border-radius:7px;
   padding:0 14px;min-height:32px;font-family:inherit;font-size:12px;font-weight:700;
-  cursor:pointer;margin-bottom:11px;white-space:nowrap;}
+  cursor:pointer;margin-bottom:4px;white-space:nowrap;}
 .xlsx:active{background:#176036;}
 .xlsx:disabled{background:var(--gray);border-color:var(--gray);}
 .badge{display:none;background:#FDECEA;color:#B3261E;border:1px solid #F5C6C0;
@@ -43,9 +47,11 @@ h1{font-size:16px;margin:0 0 1px;letter-spacing:-.4px;color:var(--navy);font-wei
 .badge.on{display:block;}
 
 /* ── 1 필터 ── */
-.fbar{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:flex-start;}
+.fbar{display:flex;flex-direction:column;gap:4px;}
+.fline{display:flex;align-items:center;gap:4px 9px;flex-wrap:wrap;}
+.sep{width:1px;height:17px;background:var(--line);display:inline-block;}
 .fgrp{display:flex;flex-direction:column;gap:6px;}
-.flab{font-size:11px;color:var(--txt2);font-weight:700;letter-spacing:.2px;}
+.flab{font-size:11px;color:var(--txt2);font-weight:700;letter-spacing:.2px;white-space:nowrap;}
 .frow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
 input[type=date]{border:1px solid var(--line);border-radius:6px;padding:3px 7px;
   font-family:inherit;font-size:12.5px;color:var(--txt);background:#fff;min-height:28px;}
@@ -53,6 +59,7 @@ input[type=date]{border:1px solid var(--line);border-radius:6px;padding:3px 7px;
 .tog button{border:0;background:#fff;padding:0 13px;min-height:28px;font-family:inherit;
   font-size:12.5px;cursor:pointer;color:var(--txt2);font-weight:600;white-space:nowrap;}
 .tog button.on{background:var(--blue);color:#fff;}
+#togBox button.on{background:#B20059;}   /* 지표 토글만 레드(자사몰과 동일) */
 .chips{display:flex;flex-wrap:wrap;gap:6px;}
 .chip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);
   border-radius:14px;padding:0 11px 0 8px;min-height:27px;font-size:12px;cursor:pointer;
@@ -151,8 +158,9 @@ thead tr.sum td.fx1,thead tr.sum td.fx2,thead tr.sum td.fx3{z-index:8;background
   .kpi{padding:6px 9px;}
   .kpi .v{font-size:17px;}
   .tabs button{flex:1;padding:0;font-size:13px;}
-  .fbar{gap:12px;}
-  .fgrp{width:100%;}
+  .fbar{gap:3px;}
+  .fline{gap:3px 7px;}
+  .sep{display:none;}
   input[type=date]{flex:1;min-width:0;}
   svg.chart{height:175px;}
   .tscroll{max-height:none;}
@@ -177,37 +185,30 @@ thead tr.sum td.fx1,thead tr.sum td.fx2,thead tr.sum td.fx3{z-index:8;background
 <!-- 1 필터 -->
 <div class="card">
   <div class="fbar">
-    <div class="fgrp">
-      <div class="flab">조회기간</div>
-      <div class="frow">
-        <input type="date" id="d1"> <span style="color:var(--gray)">~</span> <input type="date" id="d2">
-        <button class="mini" id="btnThis">당월</button>
-        <button class="mini" id="btnAll">전체</button>
-      </div>
-      <div class="frow" id="monRow"><span class="unit" style="margin-right:2px">월 바로가기</span></div>
-      <div class="unit" id="cmpline"></div>
-      <div class="warn" id="cmpwarn"></div>
+    <div class="fline">
+      <span class="flab">조회기간</span>
+      <input type="date" id="d1"> <span style="color:var(--gray)">~</span> <input type="date" id="d2">
+      <button class="mini" id="btnThis">당월</button>
+      <button class="mini" id="btnAll">전체</button>
+      <i class="sep"></i>
+      <span class="flab">보기</span>
+      <div class="tog"><button id="tgDay" class="on">일별</button><button id="tgMon">월별</button></div>
+      <i class="sep"></i>
+      <span class="flab">지표</span>
+      <div class="tog" id="togBox"></div>
+      <span class="unit" id="unitline"></span>
     </div>
-    <div class="fgrp">
-      <div class="flab">보기 단위</div>
-      <div class="frow">
-        <div class="tog">
-          <button id="tgDay" class="on">일별</button><button id="tgMon">월별</button>
-        </div>
-      </div>
-    </div>
-    <div class="fgrp">
-      <div class="flab">지표</div>
-      <div class="frow">
-        <div class="tog" id="togBox"></div>
-        <span class="unit" id="unitline"></span>
-      </div>
-    </div>
-    <div class="fgrp" style="flex:1;min-width:260px;">
-      <div class="flab">유형선택 &nbsp;<button class="mini" id="bAllOn">전체</button>
-        <button class="mini" id="bAllOff">해제</button></div>
+    <div class="fline">
+      <span class="flab">월</span>
+      <div class="frow" id="monRow"></div>
+      <i class="sep"></i>
+      <span class="flab">유형</span>
       <div class="chips" id="cBig"></div>
+      <button class="mini" id="bAllOn">전체</button>
+      <button class="mini" id="bAllOff">해제</button>
     </div>
+    <div class="fline"><span class="unit" id="cmpline"></span></div>
+    <div class="warn" id="cmpwarn"></div>
   </div>
 </div>
 
@@ -234,6 +235,7 @@ thead tr.sum td.fx1,thead tr.sum td.fx2,thead tr.sum td.fx3{z-index:8;background
 <div class="card">
   <div class="cardhd">
     <h2 id="tblTitle">판매 수량 및 금액</h2>
+    <label class="chk" id="lbl25"><input type="checkbox" id="inc25"> 25년 포함</label>
     <button class="xlsx" id="btnXlsx">엑셀 내보내기</button>
   </div>
   <div class="tscroll"><table id="tbl"></table></div>
@@ -256,6 +258,8 @@ const md=s=>{const p=s.split('-');return (+p[1])+'/'+(+p[2]);};
 const shiftY=(s,n)=>{const p=s.split('-');p[0]=+p[0]+n;return p.join('-');};
 const isMon=s=>s.length===7;
 const kLabel=s=>isMon(s)?((+s.slice(5,7))+'월'):md(s);
+/* 25년을 함께 볼 때는 연도가 드러나야 하므로 26.01 형태로 */
+const kLab=s=>(ST.inc25&&ST.gran==='month'&&isMon(s))?(s.slice(2,4)+'.'+s.slice(5,7)):kLabel(s);
 const kOf=d=>ST.gran==='month'?d.slice(0,7):d;
 
 /* 지표 정의 : key → [라벨, 단위, rows 인덱스(비율이면 null), 소수자리] */
@@ -267,7 +271,7 @@ const TABMET={sale:['amt','qty'], conv:['vis','ord','cvr']};
 const BIG_ORDER=['드라이어','고데기','헤어롤','기타'];
 
 let DATES,PRODS,ROWS,BUILT,SRCN,BIGS,CUR_YEAR,PREV_RANGE=null;
-const ST={metric:'amt', tab:'sale', big:new Set(), sel:null, gran:'day'};
+const ST={metric:'amt', tab:'sale', big:new Set(), sel:null, gran:'day', inc25:false};
 let LAST,FIRST_OF_MONTH;
 
 /* ───────── 데이터 로드 (인라인 → 없으면 data.json) ───────── */
@@ -371,6 +375,12 @@ function aggregate(){
   /* 일별이면 키가 일자, 월별이면 키가 월(YYYY-MM). 아래 집계·표·그래프가 모두 이 키를 쓴다 */
   const curKeys=[...new Set(curDates.map(kOf))];
   const cmpKeys=[...new Set(cmpDates.map(kOf))];
+  /* 25년 포함: 표에만 25년 월을 앞쪽에 덧붙인다 (요약·그래프는 조회기간 그대로) */
+  const useY25 = ST.inc25 && ST.gran==='month';
+  const y25Keys = useY25
+    ? [...new Set(DATES.filter(x=>x.startsWith('2025')).map(x=>x.slice(0,7)))].sort()
+        .filter(k=>curKeys.indexOf(k)<0)
+    : [];
   const curSeries={}, cmpSeries={};
   curKeys.forEach(k=>curSeries[k]=[0,0,0,0,0,0]);
   cmpKeys.forEach(k=>cmpSeries[k]=[0,0,0,0,0,0]);
@@ -380,9 +390,15 @@ function aggregate(){
     if(!ok.has(pi)) continue;
     const d=DATES[r[0]];
     const isC=inCur.has(d), isP=inCmp.has(d);
-    if(!isC&&!isP) continue;
+    /* 25년 포함일 때는 조회·비교 기간 밖(예: 25년 10~12월)도 표에 필요하므로 살려둔다 */
+    const isY25 = useY25 && d>='2025-01-01' && d<'2026-01-01';
+    if(!isC&&!isP&&!isY25) continue;
     let m=M[pi]; if(!m){m=M[pi]=mk();}
     const bk=kOf(d);                      // 이 행이 들어갈 칸(일자 또는 월)
+    if(useY25 && !isC && y25Keys.indexOf(bk)>=0){   // 표에 보여줄 25년 칸만 따로 채운다
+      let a=m.days[bk]; if(!a){a=m.days[bk]=[0,0,0,0,0,0];}
+      a[2]+=r[2];a[3]+=r[3];a[4]+=r[4];a[5]+=r[5];
+    }
     if(isC){
       m.cQty+=r[2]; m.cAmt+=r[3]; m.cVis+=r[4]; m.cOrd+=r[5];
       let a=m.days[bk]; if(!a){a=m.days[bk]=[0,0,0,0,0,0];}
@@ -398,7 +414,7 @@ function aggregate(){
       const s=cmpSeries[bk]; if(s){s[2]+=r[2];s[3]+=r[3];s[4]+=r[4];s[5]+=r[5];}
     }
   }
-  return {M,tot,curDates,cmpDates,curKeys,cmpKeys,curSeries,cmpSeries,d1,d2,c1,c2};
+  return {M,tot,curDates,cmpDates,curKeys,cmpKeys,y25Keys,curSeries,cmpSeries,d1,d2,c1,c2};
 }
 
 /* 일자 배열에서 현재 지표값 뽑기 (cvr 은 결제건수/방문수) */
@@ -568,8 +584,8 @@ function renderChart(A){
 /* ───────── 판매 표 ───────── */
 function renderSaleTable(A){
   const amt=ST.metric==='amt', vi=amt?3:2, unit=amt?'천원':'개';
-  /* 일별·월별 모두 오름차순(과거→최근) */
-  const days=A.curKeys.slice();
+  /* 일별·월별 모두 오름차순(과거→최근). 25년 포함이면 앞쪽에 25년 월을 붙인다 */
+  const days=A.y25Keys.concat(A.curKeys);
   const list=Object.keys(A.M).map(k=>+k).map(pi=>{
     const m=A.M[pi], p=PRODS[pi];
     const c=amt?m.cAmt:m.cQty, q=amt?m.pAmt:m.pQty;
@@ -581,7 +597,7 @@ function renderSaleTable(A){
   let head='<tr>'+
     '<th class="fx1">대유형</th><th class="fx2">중유형</th><th class="fx3">상품명</th>'+
     '<th>비교기간</th><th>비중</th><th>조회기간</th><th>비중</th><th>증감</th><th>성장률</th>';
-  days.forEach(d=>head+='<th>'+kLabel(d)+'</th>');
+  days.forEach(d=>head+='<th>'+kLab(d)+'</th>');
   head+='</tr>';
   let h='<tbody>';
   if(!list.length) h+='<tr><td colspan="'+(9+days.length)+'" class="empty">조건에 맞는 데이터가 없습니다</td></tr>';
@@ -613,7 +629,7 @@ function renderSaleTable(A){
   $('#tblTitle').textContent='판매 수량 및 금액 — 순'+(amt?'금액 (천원)':'수량 (개)');
   $('#tblNote').innerHTML='· 순금액 = 판매금액(순) ÷ 1,000 &nbsp;|&nbsp; 순수량 = 상품결제건수 − 환불건수 &nbsp;|&nbsp; 단위: '+unit+'<br>'+
     '· 비교기간 '+A.c1+' ~ '+A.c2+' (전년 동일 일자) · '+
-    (ST.gran==='month'?'월별 열은 오름차순(각 월 합계)':'일자별 열은 오름차순')+
+    (ST.gran==='month'?('월별 열은 오름차순(각 월 합계)'+(ST.inc25&&A.y25Keys.length?' · 25년 '+A.y25Keys.length+'개월을 앞쪽에 포함':'')):'일자별 열은 오름차순')+
     ' · 표시값은 정수 반올림';
   bindRows();
 }
@@ -795,7 +811,7 @@ function exportXlsx(){
 
   if(ST.tab==='sale'){
     const amt=ST.metric==='amt', vi=amt?3:2, unit=amt?'천원':'개';
-    const days=A.curKeys.slice();
+    const days=A.y25Keys.concat(A.curKeys);
     const list=Object.keys(A.M).map(k=>+k).map(pi=>{
       const m=A.M[pi],p=PRODS[pi];
       const c=amt?m.cAmt:m.cQty, q=amt?m.pAmt:m.pQty;
@@ -805,7 +821,7 @@ function exportXlsx(){
     const sC=list.reduce((s,r)=>s+r.cur,0), sP=list.reduce((s,r)=>s+r.cmp,0);
 
     title='판매 수량 및 금액 — 순'+(amt?'금액':'수량')+' (단위: '+unit+')';
-    head=['대유형','중유형','상품명','비교기간','비중','조회기간','비중','증감','성장률'].concat(days.map(kLabel));
+    head=['대유형','중유형','상품명','비교기간','비중','조회기간','비중','증감','성장률'].concat(days.map(kLab));
     list.forEach(r=>{
       const m=A.M[r.pi];
       body.push([S(r.big),S(r.mid),S(r.name),N(r.cmp),P(sP?r.cmp/sP:null),N(r.cur),P(sC?r.cur/sC:null),
@@ -891,6 +907,10 @@ function render(){
   const A=aggregate();
   $('#cmpline').textContent='비교기간(전년): '+A.c1+' ~ '+A.c2;
   checkCmp(A); markMonth();
+  const on=(ST.gran==='month');            // 25년 포함은 월별 보기에서만 의미가 있다
+  $('#inc25').disabled=!on;
+  $('#lbl25').className='chk'+(on?'':' dis');
+  $('#lbl25').title=on?'':'월별 보기에서 사용할 수 있습니다';
   const u=METRIC[ST.metric][1];
   $('#unitline').textContent=u?('단위: '+u):'단위: 건';
   $('#selInfo').textContent=(ST.sel==null)?'전체 합계':('선택: '+PRODS[ST.sel][0]);
@@ -936,6 +956,7 @@ function init(){
     $('#d1').value=(yr[0]||DATES[0]); $('#d2').value=LAST; render();});
   $('#tabSale').addEventListener('click',()=>setTab('sale'));
   $('#tabConv').addEventListener('click',()=>setTab('conv'));
+  $('#inc25').addEventListener('change',e=>{ST.inc25=e.target.checked;render();});
   $('#tgDay').addEventListener('click',()=>setGran('day'));
   $('#tgMon').addEventListener('click',()=>setGran('month'));
   $('#bAllOn').addEventListener('click',()=>{BIGS.forEach(b=>ST.big.add(b));buildChips();render();});
