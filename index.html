@@ -61,6 +61,13 @@ input[type=date]{border:1px solid var(--line);border-radius:6px;padding:3px 7px;
 .tog button.on{background:var(--blue);color:#fff;}
 #togBox button.on{background:#B20059;}   /* 지표 토글만 레드(자사몰과 동일) */
 .chips{display:flex;flex-wrap:wrap;gap:6px;}
+.sel{border:1px solid var(--line);border-radius:6px;padding:0 6px;min-height:27px;
+  font-family:inherit;font-size:12px;color:var(--txt);background:#fff;cursor:pointer;max-width:150px;}
+.sel.act{border-color:var(--blue);color:var(--blue-d);font-weight:700;}
+.txt{border:1px solid var(--line);border-radius:6px;padding:0 8px;min-height:27px;
+  font-family:inherit;font-size:12px;color:var(--txt);background:#fff;width:150px;}
+.txt::placeholder{color:var(--gray);}
+.txt.act{border-color:var(--blue);}
 .chip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);
   border-radius:14px;padding:0 11px 0 8px;min-height:27px;font-size:12px;cursor:pointer;
   background:#fff;color:var(--txt2);user-select:none;transition:.12s;}
@@ -133,7 +140,7 @@ thead th.fx1,thead th.fx2,thead th.fx3{z-index:8;background:var(--head);}
 tbody tr:hover .fx1,tbody tr:hover .fx2,tbody tr:hover .fx3{background:#F3F8FF;}
 tbody tr.sel .fx1,tbody tr.sel .fx2,tbody tr.sel .fx3{background:#E3EEFC;}
 .cur{font-weight:700;color:var(--txt);}
-.cmp{color:var(--gray);}
+.cmp{color:var(--txt);}   /* 비교기간도 상품명과 같은 굵기·색 */
 .up{color:var(--up);} .dn{color:var(--down);}
 .dcol{color:#5A6675;}
 /* 계 행은 머리글 바로 아래에 붙여 고정한다 (--hh = 머리글 높이, JS가 실측해 채움) */
@@ -203,9 +210,13 @@ thead tr.sum td.fx1,thead tr.sum td.fx2,thead tr.sum td.fx3{z-index:8;background
       <div class="frow" id="monRow"></div>
       <i class="sep"></i>
       <span class="flab">유형</span>
-      <div class="chips" id="cBig"></div>
-      <button class="mini" id="bAllOn">전체</button>
-      <button class="mini" id="bAllOff">해제</button>
+      <select class="sel" id="fBig"></select>
+      <select class="sel" id="fMid"></select>
+      <select class="sel" id="fSml"></select>
+      <select class="sel" id="fFrm"></select>
+      <i class="sep"></i>
+      <input type="text" class="txt" id="fQ" placeholder="품명 (부분일치)">
+      <button class="mini" id="bReset">초기화</button>
     </div>
     <div class="fline"><span class="unit" id="cmpline"></span></div>
     <div class="warn" id="cmpwarn"></div>
@@ -271,7 +282,7 @@ const TABMET={sale:['amt','qty'], conv:['vis','ord','cvr']};
 const BIG_ORDER=['드라이어','고데기','헤어롤','기타'];
 
 let DATES,PRODS,ROWS,BUILT,SRCN,BIGS,CUR_YEAR,PREV_RANGE=null;
-const ST={metric:'amt', tab:'sale', big:new Set(), sel:null, gran:'day', inc25:false};
+const ST={metric:'amt', tab:'sale', f:{big:'',mid:'',sml:'',frm:'',q:''}, sel:null, gran:'day', inc25:false};
 let LAST,FIRST_OF_MONTH;
 
 /* ───────── 데이터 로드 (인라인 → 없으면 data.json) ───────── */
@@ -293,7 +304,7 @@ async function boot(){
 
   const set=new Set(PRODS.map(p=>p[1]));
   BIGS=BIG_ORDER.filter(b=>set.has(b)).concat([...set].filter(b=>!BIG_ORDER.includes(b)).sort());
-  BIGS.forEach(b=>ST.big.add(b));
+
 
   /* 기준 연도는 데이터에서 뽑는다 (연도를 박아두면 해가 바뀔 때 손봐야 한다) */
   LAST=DATES[DATES.length-1];
@@ -311,19 +322,48 @@ async function boot(){
 }
 
 /* ───────── 필터 UI ───────── */
-function buildChips(){
-  const box=$('#cBig'); box.innerHTML='';
-  BIGS.forEach(b=>{
-    const el=document.createElement('label');
-    el.className='chip'+(ST.big.has(b)?' on':'');
-    el.innerHTML='<input type="checkbox"'+(ST.big.has(b)?' checked':'')+'><span>'+b+'</span>';
-    el.querySelector('input').addEventListener('change',e=>{
-      if(e.target.checked){ST.big.add(b);el.classList.add('on');}
-      else{ST.big.delete(b);el.classList.remove('on');}
-      render();
-    });
-    box.appendChild(el);
-  });
+/* 대→중→소 연동 드롭다운.
+   목록을 좁히는 방향은 위에서 아래로만 간다. 하위를 골랐다고 상위 목록이 줄어들면
+   상위를 다시 못 바꾸게 되므로, 각 드롭다운은 자기보다 위쪽 조건만 반영한다. */
+const LVL={big:0,mid:1,sml:2,frm:3}, IDX={big:1,mid:2,sml:3,frm:4};
+function passLevel(p,lv){
+  const f=ST.f;
+  if(lv>0 && f.big && p[1]!==f.big) return false;
+  if(lv>1 && f.mid && p[2]!==f.mid) return false;
+  if(lv>2 && f.sml && p[3]!==f.sml) return false;
+  return true;
+}
+/* 집계에 쓰는 진짜 필터 — 고른 조건을 모두 만족해야 한다 */
+function prodPass(p){
+  const f=ST.f;
+  if(f.big && p[1]!==f.big) return false;
+  if(f.mid && p[2]!==f.mid) return false;
+  if(f.sml && p[3]!==f.sml) return false;
+  if(f.frm && (p[4]||'기타')!==f.frm) return false;
+  if(f.q   && p[0].toLowerCase().indexOf(f.q)<0) return false;
+  return true;
+}
+function optsFor(key){
+  const lv=LVL[key], idx=IDX[key], seen=new Set();
+  PRODS.forEach(p=>{ if(passLevel(p,lv)) seen.add(idx===4?(p[4]||'기타'):p[idx]); });
+  let list=[...seen];
+  if(key==='big') list=BIG_ORDER.filter(b=>seen.has(b)).concat(list.filter(b=>!BIG_ORDER.includes(b)).sort());
+  else list.sort();
+  return list;
+}
+function fillSel(id,key,label){
+  const el=$(id), cur=ST.f[key], list=optsFor(key);
+  if(cur && list.indexOf(cur)<0) ST.f[key]='';          // 상위가 바뀌어 사라진 값은 해제
+  el.innerHTML='<option value="">'+label+' (전체)</option>'+
+    list.map(v=>'<option value="'+v+'"'+(ST.f[key]===v?' selected':'')+'>'+v+'</option>').join('');
+  el.className='sel'+(ST.f[key]?' act':'');
+}
+function buildSelects(){
+  fillSel('#fBig','big','대유형');
+  fillSel('#fMid','mid','중유형');
+  fillSel('#fSml','sml','소유형');
+  fillSel('#fFrm','frm','형태');
+  $('#fQ').className='txt'+(ST.f.q?' act':'');
 }
 /* 월 바로가기 — 클릭하면 그 달만 조회한다. 데이터가 있는 날짜까지만 잡으므로
    진행 중인 달은 자동으로 '1일 ~ 마지막 보유일' 이 된다. */
@@ -366,7 +406,7 @@ function aggregate(){
   const curDates=DATES.filter(d=>d>=d1&&d<=d2);
   const cmpDates=DATES.filter(d=>d>=c1&&d<=c2);
   const ok=new Set();
-  PRODS.forEach((p,i)=>{ if(ST.big.has(p[1])) ok.add(i); });
+  PRODS.forEach((p,i)=>{ if(prodPass(p)) ok.add(i); });
 
   const inCur=new Set(curDates), inCmp=new Set(cmpDates);
   const M={};
@@ -815,27 +855,27 @@ function exportXlsx(){
     const list=Object.keys(A.M).map(k=>+k).map(pi=>{
       const m=A.M[pi],p=PRODS[pi];
       const c=amt?m.cAmt:m.cQty, q=amt?m.pAmt:m.pQty;
-      return {pi,big:p[1],mid:p[2],name:p[0],cmp:q,cur:c,diff:c-q,gr:q?(c-q)/q:null};
+      return {pi,big:p[1],mid:p[2],sml:p[3],frm:p[4]||'기타',name:p[0],cmp:q,cur:c,diff:c-q,gr:q?(c-q)/q:null};
     }).filter(r=>r.cur||r.cmp);
     list.sort((a,b)=>b.cur-a.cur);
     const sC=list.reduce((s,r)=>s+r.cur,0), sP=list.reduce((s,r)=>s+r.cmp,0);
 
     title='판매 수량 및 금액 — 순'+(amt?'금액':'수량')+' (단위: '+unit+')';
-    head=['대유형','중유형','상품명','비교기간','비중','조회기간','비중','증감','성장률'].concat(days.map(kLab));
+    head=['대유형','중유형','소유형','형태','상품명','비교기간','비중','조회기간','비중','증감','성장률'].concat(days.map(kLab));
     list.forEach(r=>{
       const m=A.M[r.pi];
-      body.push([S(r.big),S(r.mid),S(r.name),N(r.cmp),P(sP?r.cmp/sP:null),N(r.cur),P(sC?r.cur/sC:null),
+      body.push([S(r.big),S(r.mid),S(r.sml),S(r.frm),S(r.name),N(r.cmp),P(sP?r.cmp/sP:null),N(r.cur),P(sC?r.cur/sC:null),
         N(r.diff),P(r.gr)].concat(days.map(d=>{const a=m.days[d];return a&&a[vi]?N(a[vi]):null;})));
     });
-    foot=[S('계',4),null,null,N(sP),null,N(sC),null,N(sC-sP),P(sP?(sC-sP)/sP:null)]
+    foot=[S('계',4),null,null,null,null,N(sP),null,N(sC),null,N(sC-sP),P(sP?(sC-sP)/sP:null)]
       .concat(days.map(d=>{let v=0;list.forEach(r=>{const a=A.M[r.pi].days[d];if(a)v+=a[vi];});return v?N(v):null;}));
-    widths=[10,12,30,13,9,13,9,13,10].concat(days.map(()=>11));
+    widths=[10,12,16,10,30,13,9,13,9,13,10].concat(days.map(()=>11));
     fname='네이버실적_판매_'+(amt?'금액':'수량')+'_'+A.d1+'~'+A.d2+'.xlsx';
   }else{
     const list=Object.keys(A.M).map(k=>+k).map(pi=>{
       const m=A.M[pi],p=PRODS[pi];
       const cr=m.cVis?m.cOrd/m.cVis:null, pr=m.pVis?m.pOrd/m.pVis:null;
-      return {pi,big:p[1],mid:p[2],name:p[0],pv:m.pVis,po:m.pOrd,pr,cv:m.cVis,co:m.cOrd,cr,
+      return {pi,big:p[1],mid:p[2],sml:p[3],frm:p[4]||'기타',name:p[0],pv:m.pVis,po:m.pOrd,pr,cv:m.cVis,co:m.cOrd,cr,
         dv:m.cVis-m.pVis,dq:m.cOrd-m.pOrd,dr:(cr!=null&&pr!=null)?cr-pr:null,
         rv:m.pVis?(m.cVis-m.pVis)/m.pVis:null, ro:m.pOrd?(m.cOrd-m.pOrd)/m.pOrd:null};
     }).filter(r=>r.cv||r.pv||r.co||r.po);
@@ -847,19 +887,20 @@ function exportXlsx(){
     const dr=(Tcr!=null&&Tpr!=null)?Tcr-Tpr:null;
 
     title='조회건수 및 전환률';
-    head=['대유형','중유형','상품명','비교방문','비교결제건','비교전환률','조회방문','조회결제건','조회전환률',
+    head=['대유형','중유형','소유형','형태','상품명','비교방문','비교결제건','비교전환률','조회방문','조회결제건','조회전환률',
           '증감방문','증감결제건','증감전환률(%p)','증감률방문','증감률결제건'];
-    list.forEach(r=>body.push([S(r.big),S(r.mid),S(r.name),N(r.pv),N(r.po),P(r.pr),
+    list.forEach(r=>body.push([S(r.big),S(r.mid),S(r.sml),S(r.frm),S(r.name),N(r.pv),N(r.po),P(r.pr),
       N(r.cv),N(r.co),P(r.cr),N(r.dv),N(r.dq),P(r.dr),P(r.rv),P(r.ro)]));
-    foot=[S('계',4),null,null,N(T.pv),N(T.po),P(Tpr),N(T.cv),N(T.co),P(Tcr),
+    foot=[S('계',4),null,null,null,null,N(T.pv),N(T.po),P(Tpr),N(T.cv),N(T.co),P(Tcr),
       N(T.cv-T.pv),N(T.co-T.po),P(dr),P(T.pv?(T.cv-T.pv)/T.pv:null),P(T.po?(T.co-T.po)/T.po:null)];
-    widths=[10,12,30,11,12,12,11,12,12,11,12,15,12,13];
+    widths=[10,12,16,10,30,11,12,12,11,12,12,11,12,15,12,13];
     fname='네이버실적_전환_'+A.d1+'~'+A.d2+'.xlsx';
   }
 
   rows.push([S(title,4)]);
   rows.push([S('조회기간 '+A.d1+' ~ '+A.d2+'   |   비교기간(전년) '+A.c1+' ~ '+A.c2+
-              '   |   유형 '+([...ST.big].join(', ')||'없음')+'   |   생성 '+BUILT)]);
+              '   |   유형 '+(['big','mid','sml','frm'].map(k=>ST.f[k]).filter(Boolean).join(' > ')||'전체')+
+              (ST.f.q?'   |   품명 "'+ST.f.q+'"':'')+'   |   생성 '+BUILT)]);
   rows.push([]);
   rows.push(head.map(h=>S(h,3)));
   body.forEach(r=>rows.push(r));
@@ -959,8 +1000,16 @@ function init(){
   $('#inc25').addEventListener('change',e=>{ST.inc25=e.target.checked;render();});
   $('#tgDay').addEventListener('click',()=>setGran('day'));
   $('#tgMon').addEventListener('click',()=>setGran('month'));
-  $('#bAllOn').addEventListener('click',()=>{BIGS.forEach(b=>ST.big.add(b));buildChips();render();});
-  $('#bAllOff').addEventListener('click',()=>{ST.big.clear();buildChips();render();});
+  [['#fBig','big'],['#fMid','mid'],['#fSml','sml'],['#fFrm','frm']].forEach(([id,k])=>{
+    $(id).addEventListener('change',e=>{ST.f[k]=e.target.value;buildSelects();render();});
+  });
+  let qt; $('#fQ').addEventListener('input',e=>{
+    clearTimeout(qt); const v=e.target.value.trim().toLowerCase();
+    qt=setTimeout(()=>{ST.f.q=v;buildSelects();render();},220);
+  });
+  $('#bReset').addEventListener('click',()=>{
+    ST.f={big:'',mid:'',sml:'',frm:'',q:''}; $('#fQ').value=''; buildSelects(); render();
+  });
   $('#btnXlsx').addEventListener('click',()=>{
     const b=$('#btnXlsx'), old=b.textContent;
     b.disabled=true; b.textContent='만드는 중…';
@@ -972,7 +1021,7 @@ function init(){
   });
   window.addEventListener('online',()=>$('#badge').className='badge');
   let rt; window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(render,180);});
-  buildChips(); buildToggle(); buildMonths(); render();
+  buildSelects(); buildToggle(); buildMonths(); render();
 }
 
 boot();
